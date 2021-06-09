@@ -43,9 +43,17 @@ import math
 
 import numpy
 
+import transforms3d
+
+TRANSLATION_IDENTITY = [0.0, 0.0, 0.0]
+ROTATION_IDENTITY = numpy.identity(3, dtype=numpy.float64)
+ZOOM_IDENTITY = [1.0, 1.0, 1.0]
+SHEAR_IDENTITY = TRANSLATION_IDENTITY
+
 
 def identity_matrix():
-    """Return 4x4 identity/unit matrix.
+    """
+    Return 4x4 identity/unit matrix.
 
     >>> I = identity_matrix()
     >>> numpy.allclose(I, numpy.dot(I, I))
@@ -56,24 +64,28 @@ def identity_matrix():
     True
 
     """
-    return numpy.identity(4, dtype=numpy.float64)
+    return transforms3d.affines.compose(TRANSLATION_IDENTITY,
+                                        ROTATION_IDENTITY,
+                                        ZOOM_IDENTITY)
 
 
 def translation_matrix(direction):
-    """Return matrix to translate by direction vector.
+    """
+    Return matrix to translate by direction vector.
 
     >>> v = numpy.random.random(3) - 0.5
     >>> numpy.allclose(v, translation_matrix(v)[:3, 3])
     True
 
     """
-    M = numpy.identity(4)
-    M[:3, 3] = direction[:3]
-    return M
+    return transforms3d.affines.compose(direction,
+                                        ROTATION_IDENTITY,
+                                        ZOOM_IDENTITY)
 
 
 def translation_from_matrix(matrix):
-    """Return translation vector from translation matrix.
+    """
+    Return translation vector from translation matrix.
 
     >>> v0 = numpy.random.random(3) - 0.5
     >>> v1 = translation_from_matrix(translation_matrix(v0))
@@ -81,11 +93,12 @@ def translation_from_matrix(matrix):
     True
 
     """
-    return numpy.array(matrix, copy=False)[:3, 3].copy()
+    return transforms3d.affines.decompose(matrix)[0]
 
 
 def reflection_matrix(point, normal):
-    """Return matrix to mirror at plane defined by point and normal vector.
+    """
+    Return matrix to mirror at plane defined by point and normal vector.
 
     >>> v0 = numpy.random.random(4) - 0.5
     >>> v0[3] = 1.0
@@ -103,15 +116,13 @@ def reflection_matrix(point, normal):
     True
 
     """
-    normal = unit_vector(normal[:3])
-    M = numpy.identity(4)
-    M[:3, :3] -= 2.0 * numpy.outer(normal, normal)
-    M[:3, 3] = (2.0 * numpy.dot(point[:3], normal)) * normal
-    return M
+    # Note: point[3] is ignored
+    return transforms3d.reflections.rfnorm2aff(normal, point[:3])
 
 
 def reflection_from_matrix(matrix):
-    """Return mirror plane point and normal vector from reflection matrix.
+    """
+    Return mirror plane point and normal vector from reflection matrix.
 
     >>> v0 = numpy.random.random(3) - 0.5
     >>> v1 = numpy.random.random(3) - 0.5
@@ -122,25 +133,13 @@ def reflection_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
-    # normal: unit eigenvector corresponding to eigenvalue -1
-    l, V = numpy.linalg.eig(M[:3, :3])
-    i = numpy.where(abs(numpy.real(l) + 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no unit eigenvector corresponding to eigenvalue -1')
-    normal = numpy.real(V[:, i[0]]).squeeze()
-    # point: any unit eigenvector corresponding to eigenvalue 1
-    l, V = numpy.linalg.eig(M)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
-    point = numpy.real(V[:, i[-1]]).squeeze()
-    point /= point[3]
+    normal, point = transforms3d.reflections.aff2rfnorm(matrix)
     return point, normal
 
 
 def rotation_matrix(angle, direction, point=None):
-    """Return matrix to rotate about axis defined by point and direction.
+    """
+    Return matrix to rotate about axis defined by point and direction.
 
     >>> angle = (random.random() - 0.5) * (2*math.pi)
     >>> direc = numpy.random.random(3) - 0.5
@@ -161,30 +160,12 @@ def rotation_matrix(angle, direction, point=None):
     True
 
     """
-    sina = math.sin(angle)
-    cosa = math.cos(angle)
-    direction = unit_vector(direction[:3])
-    # rotation matrix around unit vector
-    R = numpy.array(((cosa, 0.0,  0.0),
-                     (0.0,  cosa, 0.0),
-                     (0.0,  0.0,  cosa)), dtype=numpy.float64)
-    R += numpy.outer(direction, direction) * (1.0 - cosa)
-    direction *= sina
-    R += numpy.array((( 0.0,         -direction[2],  direction[1]),
-                      ( direction[2], 0.0,          -direction[0]),
-                      (-direction[1], direction[0],  0.0)),
-                     dtype=numpy.float64)
-    M = numpy.identity(4)
-    M[:3, :3] = R
-    if point is not None:
-        # rotation not around origin
-        point = numpy.array(point[:3], dtype=numpy.float64, copy=False)
-        M[:3, 3] = point - numpy.dot(R, point)
-    return M
+    return transforms3d.axangles.axangle2aff(direction, angle, point=point)
 
 
 def rotation_from_matrix(matrix):
-    """Return rotation angle and axis from rotation matrix.
+    """
+    Return rotation angle and axis from rotation matrix.
 
     >>> angle = (random.random() - 0.5) * (2*math.pi)
     >>> direc = numpy.random.random(3) - 0.5
@@ -196,35 +177,13 @@ def rotation_from_matrix(matrix):
     True
 
     """
-    R = numpy.array(matrix, dtype=numpy.float64, copy=False)
-    R33 = R[:3, :3]
-    # direction: unit eigenvector of R33 corresponding to eigenvalue of 1
-    l, W = numpy.linalg.eig(R33.T)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
-    direction = numpy.real(W[:, i[-1]]).squeeze()
-    # point: unit eigenvector of R33 corresponding to eigenvalue of 1
-    l, Q = numpy.linalg.eig(R)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no unit eigenvector corresponding to eigenvalue 1')
-    point = numpy.real(Q[:, i[-1]]).squeeze()
-    point /= point[3]
-    # rotation angle depending on direction
-    cosa = (numpy.trace(R33) - 1.0) / 2.0
-    if abs(direction[2]) > 1e-8:
-        sina = (R[1, 0] + (cosa-1.0)*direction[0]*direction[1]) / direction[2]
-    elif abs(direction[1]) > 1e-8:
-        sina = (R[0, 2] + (cosa-1.0)*direction[0]*direction[2]) / direction[1]
-    else:
-        sina = (R[2, 1] + (cosa-1.0)*direction[1]*direction[2]) / direction[0]
-    angle = math.atan2(sina, cosa)
+    direction, angle, point = transforms3d.axangles.aff2axangle(matrix)
     return angle, direction, point
 
 
 def scale_matrix(factor, origin=None, direction=None):
-    """Return matrix to scale by factor around origin in direction.
+    """
+    Return matrix to scale by factor around origin in direction.
 
     Use factor -1 for point symmetry.
 
@@ -240,28 +199,14 @@ def scale_matrix(factor, origin=None, direction=None):
     >>> S = scale_matrix(factor, origin, direct)
 
     """
-    if direction is None:
-        # uniform scaling
-        M = numpy.array(((factor, 0.0,    0.0,    0.0),
-                         (0.0,    factor, 0.0,    0.0),
-                         (0.0,    0.0,    factor, 0.0),
-                         (0.0,    0.0,    0.0,    1.0)), dtype=numpy.float64)
-        if origin is not None:
-            M[:3, 3] = origin[:3]
-            M[:3, 3] *= 1.0 - factor
-    else:
-        # nonuniform scaling
-        direction = unit_vector(direction[:3])
-        factor = 1.0 - factor
-        M = numpy.identity(4)
-        M[:3, :3] -= factor * numpy.outer(direction, direction)
-        if origin is not None:
-            M[:3, 3] = (factor * numpy.dot(origin[:3], direction)) * direction
-    return M
+    return transforms3d.zooms.zfdir2aff(factor,
+                                        direction=direction,
+                                        origin=origin)
 
 
 def scale_from_matrix(matrix):
-    """Return scaling factor, origin and direction from scaling matrix.
+    """
+    Return scaling factor, origin and direction from scaling matrix.
 
     >>> factor = random.random() * 10 - 5
     >>> origin = numpy.random.random(3) - 0.5
@@ -278,32 +223,14 @@ def scale_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
-    M33 = M[:3, :3]
-    factor = numpy.trace(M33) - 2.0
-    try:
-        # direction: unit eigenvector corresponding to eigenvalue factor
-        l, V = numpy.linalg.eig(M33)
-        i = numpy.where(abs(numpy.real(l) - factor) < 1e-8)[0][0]
-        direction = numpy.real(V[:, i]).squeeze()
-        direction /= vector_norm(direction)
-    except IndexError:
-        # uniform scaling
-        factor = (factor + 2.0) / 3.0
-        direction = None
-    # origin: any eigenvector corresponding to eigenvalue 1
-    l, V = numpy.linalg.eig(M)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no eigenvector corresponding to eigenvalue 1')
-    origin = numpy.real(V[:, i[-1]]).squeeze()
-    origin /= origin[3]
+    factor, direction, origin = transforms3d.zooms.aff2zfdir(matrix)
     return factor, origin, direction
 
 
 def projection_matrix(point, normal, direction=None,
                       perspective=None, pseudo=False):
-    """Return matrix to project onto plane defined by point and normal.
+    """
+    Return matrix to project onto plane defined by point and normal.
 
     Using either perspective point, projection direction, or none of both.
 
@@ -364,7 +291,8 @@ def projection_matrix(point, normal, direction=None,
 
 
 def projection_from_matrix(matrix, pseudo=False):
-    """Return projection plane and perspective point from projection matrix.
+    """
+    Return projection plane and perspective point from projection matrix.
 
     Return values are same as arguments for projection_matrix function:
     point, normal, direction, perspective, and pseudo.
@@ -437,7 +365,8 @@ def projection_from_matrix(matrix, pseudo=False):
 
 
 def clip_matrix(left, right, bottom, top, near, far, perspective=False):
-    """Return matrix to obtain normalized device coordinates from frustrum.
+    """
+    Return matrix to obtain normalized device coordinates from frustrum.
 
     The frustrum bounds are axis-aligned along x (left, right),
     y (bottom, top) and z (near, far).
@@ -489,7 +418,8 @@ def clip_matrix(left, right, bottom, top, near, far, perspective=False):
 
 
 def shear_matrix(angle, direction, point, normal):
-    """Return matrix to shear by angle along direction vector on shear plane.
+    """
+    Return matrix to shear by angle along direction vector on shear plane.
 
     The shear plane is defined by a point and normal vector. The direction
     vector must be orthogonal to the plane's normal vector.
@@ -508,19 +438,12 @@ def shear_matrix(angle, direction, point, normal):
     True
 
     """
-    normal = unit_vector(normal[:3])
-    direction = unit_vector(direction[:3])
-    if abs(numpy.dot(normal, direction)) > 1e-6:
-        raise ValueError('direction and normal vectors are not orthogonal')
-    angle = math.tan(angle)
-    M = numpy.identity(4)
-    M[:3, :3] += angle * numpy.outer(direction, normal)
-    M[:3, 3] = -angle * numpy.dot(point[:3], normal) * direction
-    return M
+    return transforms3d.shears.sadn2aff(angle, direction, normal, point)
 
 
 def shear_from_matrix(matrix):
-    """Return shear angle, direction and plane from shear matrix.
+    """
+    Return shear angle, direction and plane from shear matrix.
 
     >>> angle = (random.random() - 0.5) * 4*math.pi
     >>> direct = numpy.random.random(3) - 0.5
@@ -533,39 +456,13 @@ def shear_from_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)
-    M33 = M[:3, :3]
-    # normal: cross independent eigenvectors corresponding to the eigenvalue 1
-    l, V = numpy.linalg.eig(M33)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-4)[0]
-    if len(i) < 2:
-        raise ValueError('No two linear independent eigenvectors found {}'.format(l))
-    V = numpy.real(V[:, i]).squeeze().T
-    lenorm = -1.0
-    for i0, i1 in ((0, 1), (0, 2), (1, 2)):
-        n = numpy.cross(V[i0], V[i1])
-        l = vector_norm(n)
-        if l > lenorm:
-            lenorm = l
-            normal = n
-    normal /= lenorm
-    # direction and angle
-    direction = numpy.dot(M33 - numpy.identity(3), normal)
-    angle = vector_norm(direction)
-    direction /= angle
-    angle = math.atan(angle)
-    # point: eigenvector corresponding to eigenvalue 1
-    l, V = numpy.linalg.eig(M)
-    i = numpy.where(abs(numpy.real(l) - 1.0) < 1e-8)[0]
-    if not len(i):
-        raise ValueError('no eigenvector corresponding to eigenvalue 1')
-    point = numpy.real(V[:, i[-1]]).squeeze()
-    point /= point[3]
+    angle, direction, normal, point = transforms3d.shears.aff2sadn(matrix)
     return angle, direction, point, normal
 
 
 def decompose_matrix(matrix):
-    """Return sequence of transformations from transformation matrix.
+    """
+    Return sequence of transformations from transformation matrix.
 
     matrix : array_like
         Non-degenerative homogeneous transformation matrix
@@ -595,63 +492,16 @@ def decompose_matrix(matrix):
     True
 
     """
-    M = numpy.array(matrix, dtype=numpy.float64, copy=True).T
-    if abs(M[3, 3]) < _EPS:
-        raise ValueError('M[3, 3] is zero')
-    M /= M[3, 3]
-    P = M.copy()
-    P[:, 3] = 0, 0, 0, 1
-    if not numpy.linalg.det(P):
-        raise ValueError('Matrix is singular')
-
-    scale = numpy.zeros((3, ), dtype=numpy.float64)
-    shear = [0, 0, 0]
-    angles = [0, 0, 0]
-
-    if any(abs(M[:3, 3]) > _EPS):
-        perspective = numpy.dot(M[:, 3], numpy.linalg.inv(P.T))
-        M[:, 3] = 0, 0, 0, 1
-    else:
-        perspective = numpy.array((0, 0, 0, 1), dtype=numpy.float64)
-
-    translate = M[3, :3].copy()
-    M[3, :3] = 0
-
-    row = M[:3, :3].copy()
-    scale[0] = vector_norm(row[0])
-    row[0] /= scale[0]
-    shear[0] = numpy.dot(row[0], row[1])
-    row[1] -= row[0] * shear[0]
-    scale[1] = vector_norm(row[1])
-    row[1] /= scale[1]
-    shear[0] /= scale[1]
-    shear[1] = numpy.dot(row[0], row[2])
-    row[2] -= row[0] * shear[1]
-    shear[2] = numpy.dot(row[1], row[2])
-    row[2] -= row[1] * shear[2]
-    scale[2] = vector_norm(row[2])
-    row[2] /= scale[2]
-    shear[1:] /= scale[2]
-
-    if numpy.dot(row[0], numpy.cross(row[1], row[2])) < 0:
-        scale *= -1
-        row *= -1
-
-    angles[1] = math.asin(-row[0, 2])
-    if math.cos(angles[1]):
-        angles[0] = math.atan2(row[1, 2], row[2, 2])
-        angles[2] = math.atan2(row[0, 1], row[0, 0])
-    else:
-        #angles[0] = math.atan2(row[1, 0], row[1, 1])
-        angles[0] = math.atan2(-row[2, 1], row[1, 1])
-        angles[2] = 0.0
-
-    return scale, shear, angles, translate, perspective
+    T, R, Z, S = transforms3d.affines.decompose(matrix)
+    angles = euler_from_matrix(R)
+    # TODO: Fill in the perspective partition of matrix
+    return Z, S, angles, T, None
 
 
 def compose_matrix(scale=None, shear=None, angles=None, translate=None,
                    perspective=None):
-    """Return transformation matrix from sequence of transformations.
+    """
+    Return transformation matrix from sequence of transformations.
 
     This is the inverse of the decompose_matrix function.
 
@@ -674,36 +524,22 @@ def compose_matrix(scale=None, shear=None, angles=None, translate=None,
     True
 
     """
-    M = numpy.identity(4)
-    if perspective is not None:
-        P = numpy.identity(4)
-        P[3, :] = perspective[:4]
-        M = numpy.dot(M, P)
-    if translate is not None:
-        T = numpy.identity(4)
-        T[:3, 3] = translate[:3]
-        M = numpy.dot(M, T)
+    T = translate if translate is not None else TRANSLATION_IDENTITY
     if angles is not None:
-        R = euler_matrix(angles[0], angles[1], angles[2], 'sxyz')
-        M = numpy.dot(M, R)
-    if shear is not None:
-        Z = numpy.identity(4)
-        Z[1, 2] = shear[2]
-        Z[0, 2] = shear[1]
-        Z[0, 1] = shear[0]
-        M = numpy.dot(M, Z)
-    if scale is not None:
-        S = numpy.identity(4)
-        S[0, 0] = scale[0]
-        S[1, 1] = scale[1]
-        S[2, 2] = scale[2]
-        M = numpy.dot(M, S)
-    M /= M[3, 3]
+        R = transforms3d.euler.euler2mat(*angles)
+    else:
+        R = ROTATION_IDENTITY
+    Z = scale if scale is not None else ZOOM_IDENTITY
+    S = shear if shear is not None else SHEAR_IDENTITY
+    M = transforms3d.affines.compose(T, R, Z, S)
+
+    # TODO: Include perspective in composition
     return M
 
 
 def orthogonalization_matrix(lengths, angles):
-    """Return orthogonalization matrix for crystallographic cell coordinates.
+    """
+    Return orthogonalization matrix for crystallographic cell coordinates.
 
     Angles are expected in degrees.
 
@@ -723,17 +559,18 @@ def orthogonalization_matrix(lengths, angles):
     cosa, cosb, cosg = numpy.cos(angles)
     co = (cosa * cosb - cosg) / (sina * sinb)
     return numpy.array((
-        ( a*sinb*math.sqrt(1.0-co*co),  0.0,    0.0, 0.0),
+        (a*sinb*math.sqrt(1.0-co*co),  0.0,    0.0, 0.0),
         (-a*sinb*co,                    b*sina, 0.0, 0.0),
-        ( a*cosb,                       b*cosa, c,   0.0),
-        ( 0.0,                          0.0,    0.0, 1.0)),
+        (a*cosb,                       b*cosa, c,   0.0),
+        (0.0,                          0.0,    0.0, 1.0)),
         dtype=numpy.float64)
 
 
 def superimposition_matrix(v0, v1, scaling=False, usesvd=True):
-    """Return matrix to transform given vector set into second vector set.
+    """
+    Return matrix to transform given vector set into second vector set.
 
-    v0 and v1 are shape (3, \*) or (4, \*) arrays of at least 3 vectors.
+    v0 and v1 are shape (3, *) or (4, *) arrays of at least 3 vectors.
 
     If usesvd is True, the weighted sum of squared deviations (RMSD) is
     minimized according to the algorithm by W. Kabsch [8]. Otherwise the
@@ -813,8 +650,8 @@ def superimposition_matrix(v0, v1, scaling=False, usesvd=True):
         # quaternion: eigenvector corresponding to most positive eigenvalue
         l, V = numpy.linalg.eig(N)
         q = V[:, numpy.argmax(l)]
-        q /= vector_norm(q) # unit quaternion
-        q = numpy.roll(q, -1) # move w component to end
+        q /= vector_norm(q)  # unit quaternion
+        q = numpy.roll(q, -1)  # move w component to end
         # homogeneous transformation matrix
         M = quaternion_matrix(q)
 
@@ -833,7 +670,8 @@ def superimposition_matrix(v0, v1, scaling=False, usesvd=True):
 
 
 def euler_matrix(ai, aj, ak, axes='sxyz'):
-    """Return homogeneous rotation matrix from Euler angles and axis sequence.
+    """
+    Return homogeneous rotation matrix from Euler angles and axis sequence.
 
     ai, aj, ak : Euler's roll, pitch and yaw angles
     axes : One of 24 axis sequences as string or encoded tuple
@@ -851,52 +689,15 @@ def euler_matrix(ai, aj, ak, axes='sxyz'):
     ...    R = euler_matrix(ai, aj, ak, axes)
 
     """
-    try:
-        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes]
-    except (AttributeError, KeyError):
-        _ = _TUPLE2AXES[axes]
-        firstaxis, parity, repetition, frame = axes
-
-    i = firstaxis
-    j = _NEXT_AXIS[i+parity]
-    k = _NEXT_AXIS[i-parity+1]
-
-    if frame:
-        ai, ak = ak, ai
-    if parity:
-        ai, aj, ak = -ai, -aj, -ak
-
-    si, sj, sk = math.sin(ai), math.sin(aj), math.sin(ak)
-    ci, cj, ck = math.cos(ai), math.cos(aj), math.cos(ak)
-    cc, cs = ci*ck, ci*sk
-    sc, ss = si*ck, si*sk
-
-    M = numpy.identity(4)
-    if repetition:
-        M[i, i] = cj
-        M[i, j] = sj*si
-        M[i, k] = sj*ci
-        M[j, i] = sj*sk
-        M[j, j] = -cj*ss+cc
-        M[j, k] = -cj*cs-sc
-        M[k, i] = -sj*ck
-        M[k, j] = cj*sc+cs
-        M[k, k] = cj*cc-ss
-    else:
-        M[i, i] = cj*ck
-        M[i, j] = sj*sc-cs
-        M[i, k] = sj*cc+ss
-        M[j, i] = cj*sk
-        M[j, j] = sj*ss+cc
-        M[j, k] = sj*cs-sc
-        M[k, i] = -sj
-        M[k, j] = cj*si
-        M[k, k] = cj*ci
-    return M
+    rotation_matrix = transforms3d.euler.euler2mat(ai, aj, ak, axes=axes)
+    return transforms3d.affines.compose(TRANSLATION_IDENTITY,
+                                        rotation_matrix,
+                                        ZOOM_IDENTITY)
 
 
 def euler_from_matrix(matrix, axes='sxyz'):
-    """Return Euler angles from rotation matrix for specified axis sequence.
+    """
+    Return Euler angles from rotation matrix for specified axis sequence.
 
     axes : One of 24 axis sequences as string or encoded tuple
 
@@ -914,47 +715,12 @@ def euler_from_matrix(matrix, axes='sxyz'):
     ...    if not numpy.allclose(R0, R1): print axes, "failed"
 
     """
-    try:
-        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
-    except (AttributeError, KeyError):
-        _ = _TUPLE2AXES[axes]
-        firstaxis, parity, repetition, frame = axes
-
-    i = firstaxis
-    j = _NEXT_AXIS[i+parity]
-    k = _NEXT_AXIS[i-parity+1]
-
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)[:3, :3]
-    if repetition:
-        sy = math.sqrt(M[i, j]*M[i, j] + M[i, k]*M[i, k])
-        if sy > _EPS:
-            ax = math.atan2( M[i, j],  M[i, k])
-            ay = math.atan2( sy,       M[i, i])
-            az = math.atan2( M[j, i], -M[k, i])
-        else:
-            ax = math.atan2(-M[j, k],  M[j, j])
-            ay = math.atan2( sy,       M[i, i])
-            az = 0.0
-    else:
-        cy = math.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
-        if cy > _EPS:
-            ax = math.atan2( M[k, j],  M[k, k])
-            ay = math.atan2(-M[k, i],  cy)
-            az = math.atan2( M[j, i],  M[i, i])
-        else:
-            ax = math.atan2(-M[j, k],  M[j, j])
-            ay = math.atan2(-M[k, i],  cy)
-            az = 0.0
-
-    if parity:
-        ax, ay, az = -ax, -ay, -az
-    if frame:
-        ax, az = az, ax
-    return ax, ay, az
+    return transforms3d.euler.mat2euler(matrix, axes=axes)
 
 
 def euler_from_quaternion(quaternion, axes='sxyz'):
-    """Return Euler angles from quaternion for specified axis sequence.
+    """
+    Return Euler angles from quaternion for specified axis sequence.
 
     >>> angles = euler_from_quaternion([0.06146124, 0, 0, 0.99810947])
     >>> numpy.allclose(angles, [0.123, 0, 0])
@@ -964,8 +730,21 @@ def euler_from_quaternion(quaternion, axes='sxyz'):
     return euler_from_matrix(quaternion_matrix(quaternion), axes)
 
 
+def _reorder_input_quaternion(quaternion):
+    """Reorder quaternion to have w term first."""
+    x, y, z, w = quaternion
+    return w, x, y, z
+
+
+def _reorder_output_quaternion(quaternion):
+    """Reorder quaternion to have w term last."""
+    w, x, y, z = quaternion
+    return x, y, z, w
+
+
 def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
-    """Return quaternion from Euler angles and axis sequence.
+    """
+    Return quaternion from Euler angles and axis sequence.
 
     ai, aj, ak : Euler's roll, pitch and yaw angles
     axes : One of 24 axis sequences as string or encoded tuple
@@ -975,93 +754,45 @@ def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
     True
 
     """
-    try:
-        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
-    except (AttributeError, KeyError):
-        _ = _TUPLE2AXES[axes]
-        firstaxis, parity, repetition, frame = axes
-
-    i = firstaxis
-    j = _NEXT_AXIS[i+parity]
-    k = _NEXT_AXIS[i-parity+1]
-
-    if frame:
-        ai, ak = ak, ai
-    if parity:
-        aj = -aj
-
-    ai /= 2.0
-    aj /= 2.0
-    ak /= 2.0
-    ci = math.cos(ai)
-    si = math.sin(ai)
-    cj = math.cos(aj)
-    sj = math.sin(aj)
-    ck = math.cos(ak)
-    sk = math.sin(ak)
-    cc = ci*ck
-    cs = ci*sk
-    sc = si*ck
-    ss = si*sk
-
-    quaternion = numpy.empty((4, ), dtype=numpy.float64)
-    if repetition:
-        quaternion[i] = cj*(cs + sc)
-        quaternion[j] = sj*(cc + ss)
-        quaternion[k] = sj*(cs - sc)
-        quaternion[3] = cj*(cc - ss)
-    else:
-        quaternion[i] = cj*sc - sj*cs
-        quaternion[j] = cj*ss + sj*cc
-        quaternion[k] = cj*cs - sj*sc
-        quaternion[3] = cj*cc + sj*ss
-    if parity:
-        quaternion[j] *= -1
-
-    return quaternion
+    return _reorder_output_quaternion(
+        transforms3d.euler.euler2quat(ai, aj, ak, axes=axes)
+    )
 
 
 def quaternion_about_axis(angle, axis):
-    """Return quaternion for rotation about axis.
+    """
+    Return quaternion for rotation about axis.
 
     >>> q = quaternion_about_axis(0.123, (1, 0, 0))
     >>> numpy.allclose(q, [0.06146124, 0, 0, 0.99810947])
     True
 
     """
-    quaternion = numpy.zeros((4, ), dtype=numpy.float64)
-    quaternion[:3] = axis[:3]
-    qlen = vector_norm(quaternion)
-    if qlen > _EPS:
-        quaternion *= math.sin(angle/2.0) / qlen
-    quaternion[3] = math.cos(angle/2.0)
-    return quaternion
+    return _reorder_output_quaternion(
+        transforms3d.quaternions.axangle2quat(axis, angle)
+    )
 
 
 def quaternion_matrix(quaternion):
-    """Return homogeneous rotation matrix from quaternion.
+    """
+    Return homogeneous rotation matrix from quaternion.
 
     >>> R = quaternion_matrix([0.06146124, 0, 0, 0.99810947])
     >>> numpy.allclose(R, rotation_matrix(0.123, (1, 0, 0)))
     True
 
     """
-    q = numpy.array(quaternion[:4], dtype=numpy.float64, copy=True)
-    nq = numpy.dot(q, q)
-    if nq < _EPS:
-        return numpy.identity(4)
-    q *= math.sqrt(2.0 / nq)
-    q = numpy.outer(q, q)
-    return numpy.array((
-        (1.0-q[1, 1]-q[2, 2],     q[0, 1]-q[2, 3],     q[0, 2]+q[1, 3], 0.0),
-        (    q[0, 1]+q[2, 3], 1.0-q[0, 0]-q[2, 2],     q[1, 2]-q[0, 3], 0.0),
-        (    q[0, 2]-q[1, 3],     q[1, 2]+q[0, 3], 1.0-q[0, 0]-q[1, 1], 0.0),
-        (                0.0,                 0.0,                 0.0, 1.0)
-        ), dtype=numpy.float64)
+    rotation_matrix = transforms3d.quaternions.quat2mat(
+        _reorder_input_quaternion(quaternion)
+    )
+    return transforms3d.affines.compose(TRANSLATION_IDENTITY,
+                                        rotation_matrix,
+                                        ZOOM_IDENTITY)
 
 
 def quaternion_from_matrix(matrix):
-    """Return quaternion from rotation matrix.
+    """
+    Return quaternion from rotation matrix.
 
     >>> R = rotation_matrix(0.123, (1, 2, 3))
     >>> q = quaternion_from_matrix(R)
@@ -1069,31 +800,15 @@ def quaternion_from_matrix(matrix):
     True
 
     """
-    q = numpy.empty((4, ), dtype=numpy.float64)
-    M = numpy.array(matrix, dtype=numpy.float64, copy=False)[:4, :4]
-    t = numpy.trace(M)
-    if t > M[3, 3]:
-        q[3] = t
-        q[2] = M[1, 0] - M[0, 1]
-        q[1] = M[0, 2] - M[2, 0]
-        q[0] = M[2, 1] - M[1, 2]
-    else:
-        i, j, k = 0, 1, 2
-        if M[1, 1] > M[0, 0]:
-            i, j, k = 1, 2, 0
-        if M[2, 2] > M[i, i]:
-            i, j, k = 2, 0, 1
-        t = M[i, i] - (M[j, j] + M[k, k]) + M[3, 3]
-        q[i] = t
-        q[j] = M[i, j] + M[j, i]
-        q[k] = M[k, i] + M[i, k]
-        q[3] = M[k, j] - M[j, k]
-    q *= 0.5 / math.sqrt(t * M[3, 3])
-    return q
+    rotation_matrix = transforms3d.affines.decompose(matrix)[1]
+    return _reorder_output_quaternion(
+        transforms3d.quaternions.mat2quat(rotation_matrix)
+    )
 
 
 def quaternion_multiply(quaternion1, quaternion0):
-    """Return multiplication of two quaternions.
+    """
+    Return multiplication of two quaternions.
 
     >>> q = quaternion_multiply([1, -2, 3, 4], [-5, 6, 7, 8])
     >>> numpy.allclose(q, [-44, -14, 48, 28])
@@ -1102,15 +817,14 @@ def quaternion_multiply(quaternion1, quaternion0):
     """
     x0, y0, z0, w0 = quaternion0
     x1, y1, z1, w1 = quaternion1
-    return numpy.array((
-         x1*w0 + y1*z0 - z1*y0 + w1*x0,
-        -x1*z0 + y1*w0 + z1*x0 + w1*y0,
-         x1*y0 - y1*x0 + z1*w0 + w1*z0,
-        -x1*x0 - y1*y0 - z1*z0 + w1*w0), dtype=numpy.float64)
+    w2, x2, y2, z2 = transforms3d.quaternions.qmult([w1, x1, y1, z1],
+                                                    [w0, x0, y0, z0])
+    return x2, y2, z2, w2
 
 
 def quaternion_conjugate(quaternion):
-    """Return conjugate of quaternion.
+    """
+    Return conjugate of quaternion.
 
     >>> q0 = random_quaternion()
     >>> q1 = quaternion_conjugate(q0)
@@ -1123,7 +837,8 @@ def quaternion_conjugate(quaternion):
 
 
 def quaternion_inverse(quaternion):
-    """Return inverse of quaternion.
+    """
+    Return inverse of quaternion.
 
     >>> q0 = random_quaternion()
     >>> q1 = quaternion_inverse(q0)
@@ -1135,7 +850,8 @@ def quaternion_inverse(quaternion):
 
 
 def quaternion_slerp(quat0, quat1, fraction, spin=0, shortestpath=True):
-    """Return spherical linear interpolation between two quaternions.
+    """
+    Return spherical linear interpolation between two quaternions.
 
     >>> q0 = random_quaternion()
     >>> q1 = random_quaternion()
@@ -1147,7 +863,7 @@ def quaternion_slerp(quat0, quat1, fraction, spin=0, shortestpath=True):
     True
     >>> q = quaternion_slerp(q0, q1, 0.5)
     >>> angle = math.acos(numpy.dot(q0, q))
-    >>> numpy.allclose(2.0, math.acos(numpy.dot(q0, q1)) / angle) or \
+    >>> numpy.allclose(2.0, math.acos(numpy.dot(q0, q1)) / angle) or
         numpy.allclose(2.0, math.acos(-numpy.dot(q0, q1)) / angle)
     True
 
@@ -1176,7 +892,8 @@ def quaternion_slerp(quat0, quat1, fraction, spin=0, shortestpath=True):
 
 
 def random_quaternion(rand=None):
-    """Return uniform random unit quaternion.
+    """
+    Return uniform random unit quaternion.
 
     rand: array like or None
         Three independent random variables that are uniformly distributed
@@ -1206,7 +923,8 @@ def random_quaternion(rand=None):
 
 
 def random_rotation_matrix(rand=None):
-    """Return uniform random rotation matrix.
+    """
+    Return uniform random rotation matrix.
 
     rnd: array like
         Three independent random variables that are uniformly distributed
@@ -1221,7 +939,8 @@ def random_rotation_matrix(rand=None):
 
 
 class Arcball(object):
-    """Virtual Trackball Control.
+    """
+    Virtual Trackball Control.
 
     >>> ball = Arcball()
     >>> ball = Arcball(initial=numpy.identity(4))
@@ -1245,7 +964,8 @@ class Arcball(object):
     """
 
     def __init__(self, initial=None):
-        """Initialize virtual trackball control.
+        """
+        Initialize virtual trackball control.
 
         initial : quaternion or rotation matrix
 
@@ -1272,7 +992,8 @@ class Arcball(object):
         self._qnow = self._qpre = self._qdown
 
     def place(self, center, radius):
-        """Place Arcball, e.g. when window size changes.
+        """
+        Place Arcball, e.g. when window size changes.
 
         center : sequence[2]
             Window coordinates of trackball center.
@@ -1293,7 +1014,7 @@ class Arcball(object):
 
     def setconstrain(self, constrain):
         """Set state of constrain to axis mode."""
-        self._constrain = constrain == True
+        self._constrain = constrain is True
 
     def getconstrain(self):
         """Return state of constrain to axis mode."""
@@ -1326,7 +1047,7 @@ class Arcball(object):
             q = [t[0], t[1], t[2], numpy.dot(self._vdown, vnow)]
             self._qnow = quaternion_multiply(q, self._qdown)
 
-    def next(self, acceleration=0.0):
+    def next(self, acceleration=0.0):  # noqa: A003 (for backwards compat.)
         """Continue rotation in direction of last drag."""
         q = quaternion_slerp(self._qpre, self._qnow, 2.0+acceleration, False)
         self._qpre, self._qnow = self._qnow, q
@@ -1343,7 +1064,7 @@ def arcball_map_to_sphere(point, center, radius):
                      0.0), dtype=numpy.float64)
     n = v[0]*v[0] + v[1]*v[1]
     if n > 1.0:
-        v /= math.sqrt(n) # position outside of sphere
+        v /= math.sqrt(n)  # position outside of sphere
     else:
         v[2] = math.sqrt(1.0 - n)
     return v
@@ -1353,7 +1074,7 @@ def arcball_constrain_to_axis(point, axis):
     """Return sphere point perpendicular to axis."""
     v = numpy.array(point, dtype=numpy.float64, copy=True)
     a = numpy.array(axis, dtype=numpy.float64, copy=True)
-    v -= a * numpy.dot(a, v) # on plane
+    v -= a * numpy.dot(a, v)  # on plane
     n = vector_norm(v)
     if n > _EPS:
         if v[2] < 0.0:
@@ -1395,11 +1116,12 @@ _AXES2TUPLE = {
     'rzxy': (1, 1, 0, 1), 'ryxy': (1, 1, 1, 1), 'ryxz': (2, 0, 0, 1),
     'rzxz': (2, 0, 1, 1), 'rxyz': (2, 1, 0, 1), 'rzyz': (2, 1, 1, 1)}
 
-_TUPLE2AXES = dict((v, k) for k, v in _AXES2TUPLE.items())
+_TUPLE2AXES = {v: k for k, v in _AXES2TUPLE.items()}
 
 
 def vector_norm(data, axis=None, out=None):
-    """Return length, i.e. eucledian norm, of ndarray along axis.
+    """
+    Return length, i.e. eucledian norm, of ndarray along axis.
 
     >>> v = numpy.random.random(3)
     >>> n = vector_norm(v)
@@ -1438,7 +1160,8 @@ def vector_norm(data, axis=None, out=None):
 
 
 def unit_vector(data, axis=None, out=None):
-    """Return ndarray normalized by length, i.e. eucledian norm, along axis.
+    """
+    Return ndarray normalized by length, i.e. eucledian norm, along axis.
 
     >>> v0 = numpy.random.random(3)
     >>> v1 = unit_vector(v0)
@@ -1482,7 +1205,8 @@ def unit_vector(data, axis=None, out=None):
 
 
 def random_vector(size):
-    """Return array of random doubles in the half-open interval [0.0, 1.0).
+    """
+    Return array of random doubles in the half-open interval [0.0, 1.0).
 
     >>> v = random_vector(10000)
     >>> numpy.all(v >= 0.0) and numpy.all(v < 1.0)
@@ -1497,7 +1221,8 @@ def random_vector(size):
 
 
 def inverse_matrix(matrix):
-    """Return inverse of square transformation matrix.
+    """
+    Return inverse of square transformation matrix.
 
     >>> M0 = random_rotation_matrix()
     >>> M1 = inverse_matrix(M0.T)
@@ -1513,7 +1238,8 @@ def inverse_matrix(matrix):
 
 
 def concatenate_matrices(*matrices):
-    """Return concatenation of series of transformation matrices.
+    """
+    Return concatenation of series of transformation matrices.
 
     >>> M = numpy.random.rand(16).reshape((4, 4)) - 0.5
     >>> numpy.allclose(M, concatenate_matrices(M))
@@ -1529,7 +1255,8 @@ def concatenate_matrices(*matrices):
 
 
 def is_same_transform(matrix0, matrix1):
-    """Return True if two matrices perform same transformation.
+    """
+    Return True if two matrices perform same transformation.
 
     >>> is_same_transform(numpy.identity(4), numpy.identity(4))
     True
