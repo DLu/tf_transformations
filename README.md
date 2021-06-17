@@ -39,6 +39,15 @@ Note that ROS 1 uses `tf` DOT `transformations` and ROS 2 uses `tf` UNDERSCORE `
 
 You also need to add a dependency on the `tf_transformations` in your `package.xml`
 
+## Installation
+
+To use this package, you need to manually install the `transforms3d` library.
+
+    sudo pip3 install transforms3d
+
+At the present time, you cannot install `transforms3d` via Ubuntu debian, nor can you force the installation of the
+ `tf_transformations` package to also include `transforms3d`.
+
 ## Implementation
 Wherever possible, this library uses `transforms3d` to do the math for each of the functions. For functions that
 are still on the Refactoring Plan, the original implementation is left in place. It is not ideal to have to maintain
