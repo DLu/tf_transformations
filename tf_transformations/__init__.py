@@ -782,7 +782,7 @@ def quaternion_about_axis(angle, axis):
 
 def quaternion_matrix(quaternion):
     """
-    Return homogeneous rotation matrix from quaternion.
+    Return 4x4 homogenous rotation matrix from quaternion.
 
     >>> R = quaternion_matrix([0.06146124, 0, 0, 0.99810947])
     >>> numpy.allclose(R, rotation_matrix(0.123, (1, 0, 0)))
