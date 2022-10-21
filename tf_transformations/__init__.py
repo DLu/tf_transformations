@@ -47,9 +47,21 @@ try:
     import transforms3d
 except ImportError:
     import sys
-    sys.stderr.write('Installing the transforms3d library by hand required. '
-                     'Please run\n'
-                     '\tsudo pip3 install transforms3d\n')
+    # Please keep in sync with note in README.md.
+    sys.stderr.write("""\
+transforms3d cannot be imported in your Python environment!
+(${PYTHONPATH}, etc.).
+
+To use this package, you need to manually install the `transforms3d` library,
+e.g.,
+
+    pip install transforms3d
+
+It is recommend to install this in a `virtualenv` or `conda env` and ensure it
+plays well with your ROS 2 workspace. Avoid `sudo pip3 install` and
+`pip3 install --user` if you can. (If you are using Docker, AppTainer, etc.,
+then do whatever your heart desires.)
+""")
     exit(-1)
 
 TRANSLATION_IDENTITY = [0.0, 0.0, 0.0]
