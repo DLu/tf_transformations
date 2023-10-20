@@ -9,7 +9,7 @@
   <maintainer email="davidvlu@gmail.com">David V. Lu!!</maintainer>
   <license>BSD</license>
 
-  <depend>python-numpy</depend>
+  <depend>python3-numpy</depend>
   <depend>python-transforms3d-pip</depend>
 
   <test_depend>ament_flake8</test_depend>
