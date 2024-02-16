@@ -41,9 +41,17 @@ You also need to add a dependency on the `tf_transformations` in your `package.x
 
 ## Installation
 
-To use this package, you need to manually install the `transforms3d` library.
+<!-- Please keep in sync with error message in `__init__.py`. -->
 
-    sudo pip3 install transforms3d
+To use this package, you need to manually install the `transforms3d` library,
+e.g.,
+
+    pip install transforms3d
+
+It is recommend to install this in a `virtualenv` or `conda env` and ensure it
+plays well with your ROS 2 workspace. Avoid `sudo pip3 install` and
+`pip3 install --user` if you can. (If you are using Docker, AppTainer, etc.,
+then do whatever your heart desires.)
 
 At the present time, you cannot install `transforms3d` via Ubuntu debian, nor can you force the installation of the
  `tf_transformations` package to also include `transforms3d`.
