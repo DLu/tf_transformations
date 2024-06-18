@@ -43,14 +43,7 @@ import math
 
 import numpy
 
-try:
-    import transforms3d
-except ImportError:
-    import sys
-    sys.stderr.write('Installing the transforms3d library by hand required. '
-                     'Please run\n'
-                     '\tsudo pip3 install transforms3d\n')
-    exit(-1)
+import transforms3d
 
 TRANSLATION_IDENTITY = [0.0, 0.0, 0.0]
 ROTATION_IDENTITY = numpy.identity(3, dtype=numpy.float64)

@@ -16,7 +16,7 @@ However, ROS 2 only supports [TF2](https://wiki.ros.org/tf2) (not to be confused
 Quoting from TF (Tully Foote) himself on [ROS Answers](https://answers.ros.org/question/373068/ros2-foxy-tftransformationsquaternion_from_euler-equivalent/),
 > tf.transformations is a fork of [https://github.com/cgohlke/transformations/](https://github.com/cgohlke/transformations/). This package has been deprecated "Transformations.py is no longer actively developed and has a few known issues and numerical instabilities."
 
-The recommended alternative is a package available via `pip` called [`transforms3d`](https://matthew-brett.github.io/transforms3d/).
+The recommended alternative is a package called [`transforms3d`](https://matthew-brett.github.io/transforms3d/). This was originally only available via `pip` but is now available via `apt` and other package managers [in the `rosdistro`](https://github.com/ros/rosdistro/pull/33091).
 
 However, using that library has a few obstacles that make porting ROS 1 code to ROS 2 difficult.
  1. The API is different. The new API has more consistent naming, but even then, it is not a one-to-one translation. for example, `tf.transformations.quaternion_from_euler` could be replaced with `transforms3d.euler.euler2quat`, but `tf` returns the quaternion with the ordering `x, y, z, w` and `transforms3d` returns `w, x, y, z`.
@@ -24,7 +24,7 @@ However, using that library has a few obstacles that make porting ROS 1 code to 
 
 ## Migration
 If you're here, its likely because you want to migrate some code easily. You have two options:
- 1. Use `transforms3d` by adding a dependency on `python-transforms3d-pip` in your `package.xml` and noting differences in API discussed above.
+ 1. Use `transforms3d` by adding a dependency on `python3-transforms3d` in your `package.xml` and noting differences in API discussed above.
  2. Use this library `tf_transformations`.
 
 If you wrote the following in ROS 1,
@@ -41,12 +41,13 @@ You also need to add a dependency on the `tf_transformations` in your `package.x
 
 ## Installation
 
-To use this package, you need to manually install the `transforms3d` library.
+This package is available in full as a ROS binary, which you can install via
+
+    sudo apt install ros-$ROSDISTRO-tf-transformations
+
+In older versions, you would need to manually install the `transforms3d` library via pip.
 
     sudo pip3 install transforms3d
-
-At the present time, you cannot install `transforms3d` via Ubuntu debian, nor can you force the installation of the
- `tf_transformations` package to also include `transforms3d`.
 
 ## Implementation
 Wherever possible, this library uses `transforms3d` to do the math for each of the functions. For functions that
