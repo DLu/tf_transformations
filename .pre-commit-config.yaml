@@ -1,0 +1,34 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  hooks:
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: check-merge-conflict
+  - id: mixed-line-ending
+  - id: check-executables-have-shebangs
+  - id: check-shebang-scripts-are-executable
+  - id: detect-private-key
+  - id: destroyed-symlinks
+  - id: check-symlinks
+  - id: check-case-conflict
+  - id: check-ast
+  - id: double-quote-string-fixer
+  - id: requirements-txt-fixer
+  - id: check-xml
+  rev: v4.5.0
+- repo: https://github.com/codespell-project/codespell
+  hooks:
+  - id: codespell
+    args:
+    - --write-changes
+  rev: v2.2.6
+- repo: https://github.com/hhatto/autopep8
+  hooks:
+  - id: autopep8
+  rev: v2.1.0
+- repo: https://github.com/PyCQA/flake8
+  hooks:
+  - id: flake8
+  rev: 7.0.0
+ci:
+  autoupdate_schedule: quarterly
