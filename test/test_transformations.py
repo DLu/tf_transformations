@@ -233,21 +233,21 @@ def test_projection_from_matrix():
 
 
 def test_clip_matrix():
-    frustrum = numpy.random.rand(6)
-    frustrum[1] += frustrum[0]
-    frustrum[3] += frustrum[2]
-    frustrum[5] += frustrum[4]
-    M = clip_matrix(*frustrum, perspective=False)
+    frustum = numpy.random.rand(6)
+    frustum[1] += frustum[0]
+    frustum[3] += frustum[2]
+    frustum[5] += frustum[4]
+    M = clip_matrix(*frustum, perspective=False)
     assert numpy.allclose(
-        numpy.dot(M, [frustrum[0], frustrum[2], frustrum[4], 1.0]),
+        numpy.dot(M, [frustum[0], frustum[2], frustum[4], 1.0]),
         [-1., -1., -1.,  1.])
     assert numpy.allclose(
-        numpy.dot(M, [frustrum[1], frustrum[3], frustrum[5], 1.0]),
+        numpy.dot(M, [frustum[1], frustum[3], frustum[5], 1.0]),
         [1.,  1.,  1.,  1.])
-    M = clip_matrix(*frustrum, perspective=True)
-    v = numpy.dot(M, [frustrum[0], frustrum[2], frustrum[4], 1.0])
+    M = clip_matrix(*frustum, perspective=True)
+    v = numpy.dot(M, [frustum[0], frustum[2], frustum[4], 1.0])
     assert numpy.allclose(v / v[3], [-1., -1., -1.,  1.])
-    v = numpy.dot(M, [frustrum[1], frustrum[3], frustrum[4], 1.0])
+    v = numpy.dot(M, [frustum[1], frustum[3], frustum[4], 1.0])
     assert numpy.allclose(v / v[3], [1.,  1., -1.,  1.])
 
 
