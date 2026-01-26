@@ -6,7 +6,7 @@
   <description>
       Reimplementation of the tf/transformations.py library for common Python spatial operations
   </description>
-  <maintainer email="davidvlu@gmail.com">David V. Lu!!</maintainer>
+  <maintainer email="david@metrorobots.com">David V. Lu!!</maintainer>
   <license>BSD</license>
 
   <depend>python3-transforms3d</depend>

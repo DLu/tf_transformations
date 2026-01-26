@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='David V. Lu!!',
-    maintainer_email='davidvlu@gmail.com',
+    maintainer_email='david@metrorobots.com',
     description='Reimplementation of the tf/transformations.py library',
     license='BSD',
     tests_require=['pytest'],
