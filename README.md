@@ -16,7 +16,7 @@ However, ROS 2 only supports [TF2](https://wiki.ros.org/tf2) (not to be confused
 Quoting from TF (Tully Foote) himself on [ROS Answers](https://answers.ros.org/question/373068/ros2-foxy-tftransformationsquaternion_from_euler-equivalent/),
 > tf.transformations is a fork of [https://github.com/cgohlke/transformations/](https://github.com/cgohlke/transformations/). This package has been deprecated "Transformations.py is no longer actively developed and has a few known issues and numerical instabilities."
 
-The recommended alternative is a package called [`transforms3d`](https://matthew-brett.github.io/transforms3d/). This was originally only available via `pip` but is now available via `apt` and other package managers [in the `rosdistro`](https://github.com/ros/rosdistro/pull/33091).
+The recommended alternative is a package called [`transforms3d`](https://matthew-brett.github.io/transforms3d/). This was originally only available via `pip` (in ROS 2 Galactic and older) but is now available via `apt` and other package managers [in the `rosdistro`](https://github.com/ros/rosdistro/pull/33091).
 
 However, using that library has a few obstacles that make porting ROS 1 code to ROS 2 difficult.
  1. The API is different. The new API has more consistent naming, but even then, it is not a one-to-one translation. for example, `tf.transformations.quaternion_from_euler` could be replaced with `transforms3d.euler.euler2quat`, but `tf` returns the quaternion with the ordering `x, y, z, w` and `transforms3d` returns `w, x, y, z`.
@@ -44,10 +44,6 @@ You also need to add a dependency on the `tf_transformations` in your `package.x
 This package is available in full as a ROS binary, which you can install via
 
     sudo apt install ros-$ROSDISTRO-tf-transformations
-
-In older versions, you would need to manually install the `transforms3d` library via pip.
-
-    sudo pip3 install transforms3d
 
 ## Implementation
 Wherever possible, this library uses `transforms3d` to do the math for each of the functions. For functions that
