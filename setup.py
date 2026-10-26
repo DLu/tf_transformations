@@ -17,5 +17,5 @@ setup(
     maintainer_email='david@metrorobots.com',
     description='Reimplementation of the tf/transformations.py library',
     license='BSD',
-    tests_require=['pytest'],
+    extras_require={'test': ['pytest']},
 )
